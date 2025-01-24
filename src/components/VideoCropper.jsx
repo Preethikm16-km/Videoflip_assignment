@@ -12,11 +12,12 @@ const VideoCropper = () => {
   const [cropperVisible, setCropperVisible] = useState(false);
   const [metadata, setMetadata] = useState([]);
 
+  // Add updateCropperSize as a dependency here
   useEffect(() => {
     if (cropperVisible) {
       updateCropperSize();
     }
-  }, [aspectRatio, cropperVisible]);
+  }, [aspectRatio, cropperVisible, updateCropperSize]);
 
   const updateCropperSize = () => {
     if (!cropperVisible) return;
@@ -64,6 +65,15 @@ const VideoCropper = () => {
     recordMetadata();
   };
 
+  // Add syncPreview as a dependency here
+  useEffect(() => {
+    const interval = setInterval(() => {
+      syncPreview();
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [coordinates, syncPreview]);
+
   const syncPreview = () => {
     const canvas = previewRef.current;
     const context = canvas.getContext("2d");
@@ -90,15 +100,25 @@ const VideoCropper = () => {
     }
   };
 
+  // Add recordMetadata as a dependency here
   useEffect(() => {
-    const interval = setInterval(() => {
-      syncPreview();
-    }, 100);
+    const video = videoRef.current;
 
-    return () => clearInterval(interval);
-  }, [coordinates]);
+    if (video) {
+      const handleTimeUpdate = () => {
+        if (cropperVisible) {
+          recordMetadata();
+        }
+      };
 
-//   Record the data with coordinates,timestamp, playbackrate
+      video.addEventListener("timeupdate", handleTimeUpdate);
+
+      return () => {
+        video.removeEventListener("timeupdate", handleTimeUpdate);
+      };
+    }
+  }, [cropperVisible, coordinates, recordMetadata]);
+
   const recordMetadata = () => {
     if (videoRef.current) {
       const video = videoRef.current;
@@ -129,25 +149,6 @@ const VideoCropper = () => {
     }
   };
 
-  useEffect(() => {
-    const video = videoRef.current;
-
-    if (video) {
-      const handleTimeUpdate = () => {
-        if (cropperVisible) {
-          recordMetadata();
-        }
-      };
-
-      video.addEventListener("timeupdate", handleTimeUpdate);
-
-      return () => {
-        video.removeEventListener("timeupdate", handleTimeUpdate);
-      };
-    }
-  }, [cropperVisible, coordinates]);
-
-// download the data
   const handleDownloadMetadata = () => {
     const data = JSON.stringify(metadata, null, 2);
     const blob = new Blob([data], { type: "application/json" });

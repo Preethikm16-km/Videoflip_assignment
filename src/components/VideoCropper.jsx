@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 
 const VideoCropper = () => {
   const videoRef = useRef(null);
@@ -12,7 +12,7 @@ const VideoCropper = () => {
   const [cropperVisible, setCropperVisible] = useState(false);
   const [metadata, setMetadata] = useState([]);
 
-  const updateCropperSize = () => {
+  const updateCropperSize = useCallback(() => {
     if (!cropperVisible) return;
 
     const video = videoRef.current.getBoundingClientRect();
@@ -25,98 +25,13 @@ const VideoCropper = () => {
     cropper.style.height = `${cropHeight}px`;
     cropper.style.width = `${cropWidth}px`;
     setCoordinates({ x: 0, y: 0, width: cropWidth, height: cropHeight });
-  };
+  }, [aspectRatio, cropperVisible]);
 
-  const syncPreview = () => {
-    const canvas = previewRef.current;
-    const context = canvas.getContext("2d");
-    const video = videoRef.current;
-
-    if (video && context) {
-      const scaleX = video.videoWidth / video.clientWidth;
-      const scaleY = video.videoHeight / video.clientHeight;
-
-      const { x, y, width, height } = coordinates;
-
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(
-        video,
-        x * scaleX,
-        y * scaleY,
-        width * scaleX,
-        height * scaleY,
-        0,
-        0,
-        canvas.width,
-        canvas.height
-      );
-    }
-  };
-
-  const recordMetadata = () => {
-    if (videoRef.current) {
-      const video = videoRef.current;
-      const currentTime = video.currentTime;
-      const volume = video.volume;
-      const playbackRate = video.playbackRate;
-
-      const videoRect = video.getBoundingClientRect();
-      const scaleX = video.videoWidth / videoRect.width;
-      const scaleY = video.videoHeight / videoRect.height;
-
-      const scaledCoordinates = [
-        coordinates.x * scaleX,
-        coordinates.y * scaleY,
-        coordinates.width * scaleX,
-        coordinates.height * scaleY
-      ];
-
-      setMetadata((prevData) => [
-        ...prevData,
-        {
-          timeStamp: currentTime,
-          coordinates: scaledCoordinates,
-          volume: volume,
-          playbackRate: playbackRate,
-        },
-      ]);
-    }
-  };
-
-  // Add updateCropperSize as a dependency here
   useEffect(() => {
     if (cropperVisible) {
       updateCropperSize();
     }
-  }, [aspectRatio, cropperVisible]);
-
-  // Add syncPreview as a dependency here
-  useEffect(() => {
-    const interval = setInterval(() => {
-      syncPreview();
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [coordinates]);
-
-  // Add recordMetadata as a dependency here
-  useEffect(() => {
-    const video = videoRef.current;
-
-    if (video) {
-      const handleTimeUpdate = () => {
-        if (cropperVisible) {
-          recordMetadata();
-        }
-      };
-
-      video.addEventListener("timeupdate", handleTimeUpdate);
-
-      return () => {
-        video.removeEventListener("timeupdate", handleTimeUpdate);
-      };
-    }
-  }, [cropperVisible, coordinates]);
+  }, [aspectRatio, cropperVisible, updateCropperSize]); // Added updateCropperSize here
 
   const handleMouseDown = (e) => {
     e.preventDefault();
@@ -149,6 +64,90 @@ const VideoCropper = () => {
     recordMetadata();
   };
 
+  const syncPreview = useCallback(() => {
+    const canvas = previewRef.current;
+    const context = canvas.getContext("2d");
+    const video = videoRef.current;
+
+    if (video && context) {
+      const scaleX = video.videoWidth / video.clientWidth;
+      const scaleY = video.videoHeight / video.clientHeight;
+
+      const { x, y, width, height } = coordinates;
+
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(
+        video,
+        x * scaleX,
+        y * scaleY,
+        width * scaleX,
+        height * scaleY,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+    }
+  }, [coordinates]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      syncPreview();
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [coordinates, syncPreview]); // Added syncPreview here
+
+  // Record the data with coordinates, timestamp, playbackrate
+  const recordMetadata = useCallback(() => {
+    if (videoRef.current) {
+      const video = videoRef.current;
+      const currentTime = video.currentTime;
+      const volume = video.volume;
+      const playbackRate = video.playbackRate;
+
+      const videoRect = video.getBoundingClientRect();
+      const scaleX = video.videoWidth / videoRect.width;
+      const scaleY = video.videoHeight / videoRect.height;
+
+      const scaledCoordinates = [
+        coordinates.x * scaleX,
+        coordinates.y * scaleY,
+        coordinates.width * scaleX,
+        coordinates.height * scaleY
+      ];
+
+      setMetadata((prevData) => [
+        ...prevData,
+        {
+          timeStamp: currentTime,
+          coordinates: scaledCoordinates,
+          volume: volume,
+          playbackRate: playbackRate,
+        },
+      ]);
+    }
+  }, [coordinates]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+
+    if (video) {
+      const handleTimeUpdate = () => {
+        if (cropperVisible) {
+          recordMetadata();
+        }
+      };
+
+      video.addEventListener("timeupdate", handleTimeUpdate);
+
+      return () => {
+        video.removeEventListener("timeupdate", handleTimeUpdate);
+      };
+    }
+  }, [cropperVisible, coordinates, recordMetadata]); // Added recordMetadata here
+
+  // Download the data
   const handleDownloadMetadata = () => {
     const data = JSON.stringify(metadata, null, 2);
     const blob = new Blob([data], { type: "application/json" });
